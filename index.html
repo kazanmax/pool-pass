@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Мой абонемент</title>
+  <script src="https://telegram.org"></script>
+  <style>
+    :root {
+      --bg: var(--tg-theme-bg-color, #ffffff);
+      --sec-bg: var(--tg-theme-secondary-bg-color, #f4f4f5);
+      --text: var(--tg-theme-text-color, #18181b);
+      --hint: var(--tg-theme-hint-color, #71717a);
+      --btn: var(--tg-theme-button-color, #2563eb);
+      --btn-text: var(--tg-theme-button-text-color, #ffffff);
+      --danger: #ef4444;
+      --success: #10b981;
+      --warning: #f59e0b;
+    }
+
+    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+    body {
+      margin: 0; padding: 16px;
+      background-color: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; min-height: 100vh;
+    }
+
+    .card {
+      background: var(--sec-bg); border-radius: 16px; padding: 20px;
+      margin-bottom: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+    }
+
+    .title { font-size: 14px; color: var(--hint); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .big-num { font-size: 48px; font-weight: 800; line-height: 1.1; }
+    .sub-num { font-size: 16px; color: var(--hint); font-weight: 500; }
+
+    .progress-wrap {
+      width: 100%; height: 10px; background: rgba(128,128,128,0.2);
+      border-radius: 99px; overflow: hidden; margin: 12px 0 8px;
+    }
+    .progress-bar { height: 100%; background: var(--btn); transition: width 0.3s ease; }
+
+    .row { display: flex; justify-content: space-between; align-items: center; font-size: 14px; }
+    .badge {
+      padding: 4px 10px; border-radius: 99px; font-weight: 600; font-size: 13px;
+      background: rgba(16, 185, 129, 0.15); color: var(--success);
+    }
+    .badge.warn { background: rgba(245, 158, 11, 0.15); color: var(--warning); }
+    .badge.danger { background: rgba(239, 68, 68, 0.15); color: var(--danger); }
+
+    button {
+      width: 100%; padding: 16px; border: none; border-radius: 14px;
+      font-size: 16px; font-weight: 700; cursor: pointer; transition: opacity 0.2s, transform 0.1s;
+    }
+    button:active { transform: scale(0.98); }
+    .btn-primary { background: var(--btn); color: var(--btn-text); margin-bottom: 10px; }
+    .btn-secondary { background: var(--sec-bg); color: var(--text); font-weight: 600; }
+    .btn-small { padding: 8px 12px; font-size: 13px; width: auto; border-radius: 10px; }
+
+    .history-item {
+      display: flex; justify-content: space-between; padding: 10px 0;
+      border-bottom: 1px solid rgba(128,128,128,0.15); font-size: 14px;
+    }
+    .history-item:last-child { border-bottom: none; }
+
+    /* Модальное окно настроек */
+    .modal {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+      align-items: center; justify-content: center; padding: 16px; z-index: 10;
+    }
+    .modal.active { display: flex; }
+    .modal-content {
+      background: var(--bg); padding: 20px; border-radius: 18px; width: 100%; max-width: 360px;
+    }
+    label { display: block; font-size: 13px; color: var(--hint); margin: 12px 0 6px; }
+    input {
+      width: 100%; padding: 12px; border-radius: 10px; border: 1px solid rgba(128,128,128,0.3);
+      background: var(--sec-bg); color: var(--text); font-size: 16px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Карточка остатка занятий -->
+  <div class="card">
+    <div class="title">Осталось занятий</div>
+    <div>
+      <span class="big-num" id="remCount">0</span>
+      <span class="sub-num" id="totalCount">/ 0</span>
+    </div>
+    <div class="progress-wrap">
+      <div class="progress-bar" id="visitsBar" style="width: 0%"></div>
+    </div>
+    <div class="row">
+      <span style="color: var(--hint)">Срок действия:</span>
+      <span id="expiryDateText" style="font-weight: 600;">Не задан</span>
+    </div>
+    <div class="row" style="margin-top: 8px;">
+      <span style="color: var(--hint)">Статус срока:</span>
+      <span class="badge" id="daysLeftBadge">Настройте абонемент</span>
+    </div>
+  </div>
+
+  <!-- Главные кнопки -->
+  <button class="btn-primary" id="checkInBtn">✅ Я в зале (-1 занятие)</button>
+  <button class="btn-secondary" id="openSettingsBtn">⚙️ Настроить / Новый абонемент</button>
+
+  <!-- История посещений -->
+  <div class="card" style="margin-top: 16px; flex-grow: 1;">
+    <div class="row" style="margin-bottom: 8px;">
+      <div class="title" style="margin: 0;">Последние посещения</div>
+      <button class="btn-secondary btn-small" id="undoBtn" style="display:none;">↩️ Отменить</button>
+    </div>
+    <div id="historyList" style="color: var(--hint); font-size: 14px;">Пока нет записей</div>
+  </div>
+
+  <!-- Окно настройки абонемента -->
+  <div class="modal" id="settingsModal">
+    <div class="modal-content">
+      <h3 style="margin: 0 0 8px;">Новый абонемент</h3>
+      <label>Всего занятий в абонементе</label>
+      <input type="number" id="inputTotal" placeholder="Например: 12" min="1" max="365">
+
+      <label>Сколько занятий осталось сейчас</label>
+      <input type="number" id="inputRemaining" placeholder="Например: 12" min="0" max="365">
+
+      <label>Дата окончания абонемента</label>
+      <input type="date" id="inputExpiry">
+
+      <div style="display: flex; gap: 8px; margin-top: 20px;">
+        <button class="btn-secondary" id="closeModalBtn">Отмена</button>
+        <button class="btn-primary" id="saveSettingsBtn" style="margin: 0;">Сохранить</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.ready();
+    tg.expand();
+
+    let state = {
+      total: 12,
+      remaining: 12,
+      expiry: '',
+      history: []
+    };
+
+    // Загрузка данных из облака Telegram (или localStorage при тесте в браузере)
+    function loadData(callback) {
+      if (tg.CloudStorage) {
+        tg.CloudStorage.getItem('gym_pass_data', (err, val) => {
+          if (!err && val) {
+            try { state = JSON.parse(val); } catch(e) {}
+          }
+          callback();
+        });
+      } else {
+        const local = localStorage.getItem('gym_pass_data');
+        if (local) state = JSON.parse(local);
+        callback();
+      }
+    }
+
+    // Сохранение данных
+    function saveData() {
+      const str = JSON.stringify(state);
+      if (tg.CloudStorage) {
+        tg.CloudStorage.setItem('gym_pass_data', str);
+      }
+      localStorage.setItem('gym_pass_data', str);
+      render();
+    }
+
+    // Отрисовка интерфейса
+    function render() {
+      document.getElementById('remCount').textContent = state.remaining;
+      document.getElementById('totalCount').textContent = `/ ${state.total}`;
+
+      const pct = state.total > 0 ? Math.max(0, Math.min(100, (state.remaining / state.total) * 100)) : 0;
+      document.getElementById('visitsBar').style.width = pct + '%';
+
+      const badge = document.getElementById('daysLeftBadge');
+      const expiryText = document.getElementById('expiryDateText');
+
+      if (state.expiry) {
+        const parts = state.expiry.split('-');
+        expiryText.textContent = `${parts[2]}.${parts[1]}.${parts[0]}`;
+
+        const today = new Date();
+        today.setHours(0,0,0,0);
+        const expDate = new Date(state.expiry + 'T00:00:00');
+        const diffDays = Math.ceil((expDate - today) / (1000 * 60 * 60 * 24));
+
+        badge.className = 'badge';
+        if (diffDays < 0) {
+          badge.textContent = 'Абонемент истек!';
+          badge.classList.add('danger');
+        } else if (diffDays === 0) {
+          badge.textContent = 'Заканчивается сегодня!';
+          badge.classList.add('danger');
+        } else if (diffDays <= 5) {
+          badge.textContent = `Осталось ${diffDays} дн.`;
+          badge.classList.add('warn');
+        } else {
+          badge.textContent = `Осталось ${diffDays} дн.`;
+        }
+      } else {
+        expiryText.textContent = 'Не задан';
+        badge.textContent = 'Укажите дату';
+      }
+
+      // История
+      const list = document.getElementById('historyList');
+      const undoBtn = document.getElementById('undoBtn');
+      if (state.history.length === 0) {
+        list.innerHTML = 'Пока нет записей';
+        undoBtn.style.display = 'none';
+      } else {
+        undoBtn.style.display = 'inline-block';
+        list.innerHTML = state.history.slice(0, 10).map((item, idx) =>
+          `<div class="history-item"><span>🏋️ Тренировка</span><span>${item}</span></div>`
+        ).join('');
+      }
+    }
+
+    // Кнопка "Я в зале"
+    document.getElementById('checkInBtn').addEventListener('click', () => {
+      if (state.remaining <= 0) {
+        tg.showAlert('Занятия в текущем абонементе закончились! Настройте новый абонемент.');
+        return;
+      }
+      if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+
+      state.remaining -= 1;
+      const now = new Date();
+      const dateStr = now.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) +
+                      ' в ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      state.history.unshift(dateStr);
+      saveData();
+    });
+
+    // Отмена последнего списания
+    document.getElementById('undoBtn').addEventListener('click', () => {
+      if (state.history.length > 0) {
+        state.history.shift();
+        state.remaining += 1;
+        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        saveData();
+      }
+    });
+
+    // Управление модальным окном
+    const modal = document.getElementById('settingsModal');
+    document.getElementById('openSettingsBtn').addEventListener('click', () => {
+      document.getElementById('inputTotal').value = state.total;
+      document.getElementById('inputRemaining').value = state.remaining;
+      document.getElementById('inputExpiry').value = state.expiry;
+      modal.classList.add('active');
+    });
+
+    document.getElementById('closeModalBtn').addEventListener('click', () => {
+      modal.classList.remove('active');
+    });
+
+    document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+      const t = parseInt(document.getElementById('inputTotal').value) || 12;
+      const r = parseInt(document.getElementById('inputRemaining').value);
+      const e = document.getElementById('inputExpiry').value;
+
+      state.total = t;
+      state.remaining = isNaN(r) ? t : r;
+      state.expiry = e;
+      state.history = [];
+      modal.classList.remove('active');
+      saveData();
+    });
+
+    loadData(render);
+  </script>
+</body>
+</html>
