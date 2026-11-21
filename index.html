@@ -63,7 +63,6 @@
     }
     .history-item:last-child { border-bottom: none; }
 
-    /* Модальное окно настроек */
     .modal {
       display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
       align-items: center; justify-content: center; padding: 16px; z-index: 10;
@@ -81,7 +80,6 @@
 </head>
 <body>
 
-  <!-- Карточка остатка занятий -->
   <div class="card">
     <div class="title">Осталось занятий</div>
     <div>
@@ -101,11 +99,9 @@
     </div>
   </div>
 
-  <!-- Главные кнопки -->
   <button class="btn-primary" id="checkInBtn">✅ Я в зале (-1 занятие)</button>
   <button class="btn-secondary" id="openSettingsBtn">⚙️ Настроить / Новый абонемент</button>
 
-  <!-- История посещений -->
   <div class="card" style="margin-top: 16px; flex-grow: 1;">
     <div class="row" style="margin-bottom: 8px;">
       <div class="title" style="margin: 0;">Последние посещения</div>
@@ -114,7 +110,6 @@
     <div id="historyList" style="color: var(--hint); font-size: 14px;">Пока нет записей</div>
   </div>
 
-  <!-- Окно настройки абонемента -->
   <div class="modal" id="settingsModal">
     <div class="modal-content">
       <h3 style="margin: 0 0 8px;">Новый абонемент</h3>
@@ -143,10 +138,9 @@
       total: 12,
       remaining: 12,
       expiry: '',
-      history: []
+      history: new Array()
     };
 
-    // Загрузка данных из облака Telegram (или localStorage при тесте в браузере)
     function loadData(callback) {
       if (tg.CloudStorage) {
         tg.CloudStorage.getItem('gym_pass_data', (err, val) => {
@@ -162,7 +156,6 @@
       }
     }
 
-    // Сохранение данных
     function saveData() {
       const str = JSON.stringify(state);
       if (tg.CloudStorage) {
@@ -172,7 +165,6 @@
       render();
     }
 
-    // Отрисовка интерфейса
     function render() {
       document.getElementById('remCount').textContent = state.remaining;
       document.getElementById('totalCount').textContent = `/ ${state.total}`;
@@ -210,21 +202,19 @@
         badge.textContent = 'Укажите дату';
       }
 
-      // История
       const list = document.getElementById('historyList');
       const undoBtn = document.getElementById('undoBtn');
-      if (state.history.length === 0) {
+      if (!state.history || state.history.length === 0) {
         list.innerHTML = 'Пока нет записей';
         undoBtn.style.display = 'none';
       } else {
         undoBtn.style.display = 'inline-block';
-        list.innerHTML = state.history.slice(0, 10).map((item, idx) =>
+        list.innerHTML = state.history.slice(0, 10).map(item =>
           `<div class="history-item"><span>🏋️ Тренировка</span><span>${item}</span></div>`
         ).join('');
       }
     }
 
-    // Кнопка "Я в зале"
     document.getElementById('checkInBtn').addEventListener('click', () => {
       if (state.remaining <= 0) {
         tg.showAlert('Занятия в текущем абонементе закончились! Настройте новый абонемент.');
@@ -240,7 +230,6 @@
       saveData();
     });
 
-    // Отмена последнего списания
     document.getElementById('undoBtn').addEventListener('click', () => {
       if (state.history.length > 0) {
         state.history.shift();
@@ -250,7 +239,6 @@
       }
     });
 
-    // Управление модальным окном
     const modal = document.getElementById('settingsModal');
     document.getElementById('openSettingsBtn').addEventListener('click', () => {
       document.getElementById('inputTotal').value = state.total;
@@ -271,7 +259,7 @@
       state.total = t;
       state.remaining = isNaN(r) ? t : r;
       state.expiry = e;
-      state.history = [];
+      state.history = new Array();
       modal.classList.remove('active');
       saveData();
     });
