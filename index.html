@@ -99,13 +99,13 @@
     </div>
   </div>
 
-  <button class="btn-primary" id="checkInBtn">✅ Я в зале (-1 занятие)</button>
-  <button class="btn-secondary" id="openSettingsBtn">⚙️ Настроить / Новый абонемент</button>
+  <button type="button" class="btn-primary" id="checkInBtn">✅ Я в зале (-1 занятие)</button>
+  <button type="button" class="btn-secondary" id="openSettingsBtn">⚙️ Настроить / Новый абонемент</button>
 
   <div class="card" style="margin-top: 16px; flex-grow: 1;">
     <div class="row" style="margin-bottom: 8px;">
       <div class="title" style="margin: 0;">Последние посещения</div>
-      <button class="btn-secondary btn-small" id="undoBtn" style="display:none;">↩️ Отменить</button>
+      <button type="button" class="btn-secondary btn-small" id="undoBtn" style="display:none;">↩️ Отменить</button>
     </div>
     <div id="historyList" style="color: var(--hint); font-size: 14px;">Пока нет записей</div>
   </div>
@@ -123,16 +123,18 @@
       <input type="date" id="inputExpiry">
 
       <div style="display: flex; gap: 8px; margin-top: 20px;">
-        <button class="btn-secondary" id="closeModalBtn">Отмена</button>
-        <button class="btn-primary" id="saveSettingsBtn" style="margin: 0;">Сохранить</button>
+        <button type="button" class="btn-secondary" id="closeModalBtn">Отмена</button>
+        <button type="button" class="btn-primary" id="saveSettingsBtn" style="margin: 0;">Сохранить</button>
       </div>
     </div>
   </div>
 
   <script>
-    const tg = window.Telegram.WebApp;
-    tg.ready();
-    tg.expand();
+    const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+    if (tg) {
+      tg.ready();
+      tg.expand();
+    }
 
     let state = {
       total: 12,
@@ -142,8 +144,8 @@
     };
 
     function loadData(callback) {
-      if (tg.CloudStorage) {
-        tg.CloudStorage.getItem('gym_pass_data', (err, val) => {
+      if (tg && tg.CloudStorage) {
+        tg.CloudStorage.getItem('gym_pass_data', function(err, val) {
           if (!err && val) {
             try { state = JSON.parse(val); } catch(e) {}
           }
@@ -151,14 +153,16 @@
         });
       } else {
         const local = localStorage.getItem('gym_pass_data');
-        if (local) state = JSON.parse(local);
+        if (local) {
+          try { state = JSON.parse(local); } catch(e) {}
+        }
         callback();
       }
     }
 
     function saveData() {
       const str = JSON.stringify(state);
-      if (tg.CloudStorage) {
+      if (tg && tg.CloudStorage) {
         tg.CloudStorage.setItem('gym_pass_data', str);
       }
       localStorage.setItem('gym_pass_data', str);
@@ -167,7 +171,7 @@
 
     function render() {
       document.getElementById('remCount').textContent = state.remaining;
-      document.getElementById('totalCount').textContent = `/ ${state.total}`;
+      document.getElementById('totalCount').textContent = '/ ' + state.total;
 
       const pct = state.total > 0 ? Math.max(0, Math.min(100, (state.remaining / state.total) * 100)) : 0;
       document.getElementById('visitsBar').style.width = pct + '%';
@@ -177,7 +181,7 @@
 
       if (state.expiry) {
         const parts = state.expiry.split('-');
-        expiryText.textContent = `${parts[2]}.${parts[1]}.${parts[0]}`;
+        expiryText.textContent = parts.reverse().join('.');
 
         const today = new Date();
         today.setHours(0,0,0,0);
@@ -192,10 +196,10 @@
           badge.textContent = 'Заканчивается сегодня!';
           badge.classList.add('danger');
         } else if (diffDays <= 5) {
-          badge.textContent = `Осталось ${diffDays} дн.`;
+          badge.textContent = 'Осталось ' + diffDays + ' дн.';
           badge.classList.add('warn');
         } else {
-          badge.textContent = `Осталось ${diffDays} дн.`;
+          badge.textContent = 'Осталось ' + diffDays + ' дн.';
         }
       } else {
         expiryText.textContent = 'Не задан';
@@ -209,49 +213,54 @@
         undoBtn.style.display = 'none';
       } else {
         undoBtn.style.display = 'inline-block';
-        list.innerHTML = state.history.slice(0, 10).map(item =>
-          `<div class="history-item"><span>🏋️ Тренировка</span><span>${item}</span></div>`
-        ).join('');
+        list.innerHTML = state.history.slice(0, 10).map(function(item) {
+          return '<div class="history-item"><span>🏋️ Тренировка</span><span>' + item + '</span></div>';
+        }).join('');
       }
     }
 
-    document.getElementById('checkInBtn').addEventListener('click', () => {
+    document.getElementById('checkInBtn').addEventListener('click', function() {
       if (state.remaining <= 0) {
-        tg.showAlert('Занятия в текущем абонементе закончились! Настройте новый абонемент.');
+        if (tg && tg.showAlert) {
+          tg.showAlert('Занятия в текущем абонементе закончились! Настройте новый абонемент.');
+        } else {
+          alert('Занятия в текущем абонементе закончились! Настройте новый абонемент.');
+        }
         return;
       }
-      if (tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
+      if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred('success');
 
       state.remaining -= 1;
       const now = new Date();
       const dateStr = now.toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit' }) +
                       ' в ' + now.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      if (!state.history) state.history = new Array();
       state.history.unshift(dateStr);
       saveData();
     });
 
-    document.getElementById('undoBtn').addEventListener('click', () => {
-      if (state.history.length > 0) {
+    document.getElementById('undoBtn').addEventListener('click', function() {
+      if (state.history && state.history.length > 0) {
         state.history.shift();
         state.remaining += 1;
-        if (tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
+        if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred('light');
         saveData();
       }
     });
 
     const modal = document.getElementById('settingsModal');
-    document.getElementById('openSettingsBtn').addEventListener('click', () => {
+    document.getElementById('openSettingsBtn').addEventListener('click', function() {
       document.getElementById('inputTotal').value = state.total;
       document.getElementById('inputRemaining').value = state.remaining;
       document.getElementById('inputExpiry').value = state.expiry;
       modal.classList.add('active');
     });
 
-    document.getElementById('closeModalBtn').addEventListener('click', () => {
+    document.getElementById('closeModalBtn').addEventListener('click', function() {
       modal.classList.remove('active');
     });
 
-    document.getElementById('saveSettingsBtn').addEventListener('click', () => {
+    document.getElementById('saveSettingsBtn').addEventListener('click', function() {
       const t = parseInt(document.getElementById('inputTotal').value) || 12;
       const r = parseInt(document.getElementById('inputRemaining').value);
       const e = document.getElementById('inputExpiry').value;
